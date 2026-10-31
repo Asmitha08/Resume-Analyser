@@ -16,6 +16,25 @@ interface SkillsCategoryChartProps {
   categoryScores: SkillCategoryScore[];
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-lg border border-slate-200 text-xs">
+        <p className="font-semibold text-slate-900 mb-1.5">{label}</p>
+        <div className="flex items-center justify-between gap-4 text-indigo-600 font-medium">
+          <span>Your Resume:</span>
+          <span className="font-bold">{payload[0]?.value}%</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 text-slate-500 font-medium mt-0.5">
+          <span>Role Benchmark:</span>
+          <span className="font-bold">{payload[1]?.value}%</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export const SkillsCategoryChart: React.FC<SkillsCategoryChartProps> = ({ categoryScores }) => {
   if (!categoryScores || categoryScores.length === 0) {
     return (
@@ -30,25 +49,6 @@ export const SkillsCategoryChart: React.FC<SkillsCategoryChartProps> = ({ catego
     Candidate: item.candidate_score,
     TargetBenchmark: item.required_score,
   }));
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-lg border border-slate-200 text-xs">
-          <p className="font-semibold text-slate-900 mb-1.5">{label}</p>
-          <div className="flex items-center justify-between gap-4 text-indigo-600 font-medium">
-            <span>Your Resume:</span>
-            <span className="font-bold">{payload[0]?.value}%</span>
-          </div>
-          <div className="flex items-center justify-between gap-4 text-slate-500 font-medium mt-0.5">
-            <span>Role Benchmark:</span>
-            <span className="font-bold">{payload[1]?.value}%</span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="w-full">

@@ -8,6 +8,15 @@ class ScoreBreakdown(BaseModel):
     experience_score: int = Field(..., ge=0, le=100, description="Project and experience relevance score")
     education_score: int = Field(..., ge=0, le=100, description="Education and fundamentals score")
 
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __contains__(self, item):
+        return hasattr(self, item)
+
+    def get(self, item, default=None):
+        return getattr(self, item, default)
+
 
 class JobMatchScore(BaseModel):
     overall_score: int = Field(..., ge=0, le=100, description="Overall match score (0-100)")
@@ -18,6 +27,15 @@ class JobMatchScore(BaseModel):
         default="AI Job Match Estimate: This score is an estimated generative alignment metric based on semantic resume and job description analysis. It is not an actual or guaranteed proprietary Applicant Tracking System (ATS) calculation.",
         description="Mandatory disclaimer distinguishing AI estimate from ATS guarantees"
     )
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __contains__(self, item):
+        return hasattr(self, item)
+
+    def get(self, item, default=None):
+        return getattr(self, item, default)
 
 
 class SkillCategoryScore(BaseModel):
@@ -85,12 +103,73 @@ class SkillGapRoadmap(BaseModel):
     thirty_day_plan: List[WeeklyRoadmap] = Field(default_factory=list)
 
 
+class ATSScoreBreakdown(BaseModel):
+    formatting_score: int = Field(..., ge=0, le=100, description="Formatting and layout readability (25% weight)")
+    section_headings_score: int = Field(..., ge=0, le=100, description="Standard section headings (20% weight)")
+    contact_info_score: int = Field(..., ge=0, le=100, description="Contact information and structure (15% weight)")
+    parsing_quality_score: int = Field(..., ge=0, le=100, description="Text extraction and character quality (20% weight)")
+    keyword_alignment_score: int = Field(..., ge=0, le=100, description="JD keyword alignment (20% weight)")
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __contains__(self, item):
+        return hasattr(self, item)
+
+    def get(self, item, default=None):
+        return getattr(self, item, default)
+
+
+class ATSFormattingCheck(BaseModel):
+    name: str = Field(..., description="Name of the check item")
+    status: str = Field(..., description="pass, warning, or fail")
+    detail: str = Field(..., description="Check findings and diagnostics")
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __contains__(self, item):
+        return hasattr(self, item)
+
+    def get(self, item, default=None):
+        return getattr(self, item, default)
+
+
+class ATSCompatibilityScore(BaseModel):
+    overall_score: int = Field(..., ge=0, le=100, description="Overall ATS Compatibility Score (0-100)")
+    category: str = Field(..., description="e.g., High ATS Compatibility, Good ATS Compatibility")
+    explanation: str = Field(..., description="Clear explanation of the ATS assessment")
+    breakdown: ATSScoreBreakdown
+    formatting_warnings: List[str] = Field(default_factory=list, description="Formatting risks or layout warnings")
+    missing_sections: List[str] = Field(default_factory=list, description="Missing standard sections")
+    detected_sections: List[str] = Field(default_factory=list, description="Detected standard sections")
+    checks: List[ATSFormattingCheck] = Field(default_factory=list, description="Granular check diagnostics")
+    keyword_coverage_percent: int = Field(default=0, ge=0, le=100)
+    found_keywords_count: int = Field(default=0)
+    total_keywords_count: int = Field(default=0)
+    recommendations: List[str] = Field(default_factory=list, description="Specific recommendations to improve ATS compatibility")
+    disclaimer: str = Field(
+        default="ATS Compatibility Score: An application-defined heuristic estimate evaluating document formatting, layout, section parsing, and contact structure. It is not an official vendor-specific ATS score.",
+        description="Mandatory ATS disclaimer"
+    )
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __contains__(self, item):
+        return hasattr(self, item)
+
+    def get(self, item, default=None):
+        return getattr(self, item, default)
+
+
 class ResumeAnalysisResponse(BaseModel):
     candidate_name: Optional[str] = "Candidate"
     filename: str
     selected_role: str
     job_title: str
     match_score: JobMatchScore
+    ats_score: ATSCompatibilityScore
     skills_analysis: SkillsAnalysis
     keyword_analysis: KeywordAnalysis
     strengths: ResumeStrengths
@@ -104,7 +183,7 @@ class ResumeAnalysisResponse(BaseModel):
 class AnalyzeTextRequest(BaseModel):
     resume_text: str = Field(..., min_length=50)
     role: str
-    job_description: str = Field(..., min_length=20)
+    job_description: Optional[str] = Field(default="", description="Target job description (uses industry role benchmark if omitted)")
     filename: Optional[str] = "Pasted_Resume.txt"
 
 

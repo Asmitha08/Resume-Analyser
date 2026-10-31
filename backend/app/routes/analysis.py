@@ -1,4 +1,5 @@
 import io
+import os
 import re
 from typing import Optional, List, Dict, Any
 
@@ -21,7 +22,11 @@ from app.schemas.analysis import (
     GenerateRoadmapRequest,
     SkillGapRoadmap,
 )
-from app.services.extractor import extract_text_from_file, validate_file_upload
+from app.services.extractor import (
+    extract_text_from_file,
+    extract_text_and_metadata_from_file,
+    validate_file_upload,
+)
 from app.services.gemini_analyzer import (
     GeminiAnalyzer,
     GeminiKeyMissingError,
@@ -54,7 +59,7 @@ async def get_roles_and_examples():
 async def analyze_resume_file(
     file: UploadFile = File(..., description="Resume file (.pdf or .docx)"),
     role: str = Form(..., description="Selected job role"),
-    job_description: str = Form(..., min_length=20, description="Target job description"),
+    job_description: Optional[str] = Form(None, description="Target job description (uses industry role benchmark if omitted)"),
     x_gemini_api_key: Optional[str] = Header(None, description="Optional override API key"),
 ):
     # Validate file
@@ -68,9 +73,9 @@ async def analyze_resume_file(
             detail=error_msg,
         )
 
-    # Extract text
+    # Extract text and layout metadata
     try:
-        resume_text = extract_text_from_file(file.filename or "resume.pdf", content)
+        resume_text, metadata = extract_text_and_metadata_from_file(file.filename or "resume.pdf", content)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -82,17 +87,24 @@ async def analyze_resume_file(
             detail=f"An unexpected error occurred while parsing the resume: {str(e)}",
         )
 
-    # Validate role
+    # Validate role and handle missing job description appropriately
     selected_role = role if role in SUPPORTED_ROLES else "Other"
+    clean_jd = (job_description or "").strip()
+    if len(clean_jd) < 20:
+        clean_jd = EXAMPLE_JOB_DESCRIPTIONS.get(
+            selected_role,
+            EXAMPLE_JOB_DESCRIPTIONS.get("Software Developer", "Professional software development role requiring strong technical skills.")
+        )
 
-    # Analyze with Gemini
+    # Analyze with Gemini & ATS Scanner
     analyzer = GeminiAnalyzer(api_key=x_gemini_api_key)
     try:
         result = analyzer.analyze_resume(
             resume_text=resume_text,
             role=selected_role,
-            job_description=job_description,
+            job_description=clean_jd,
             filename=file.filename or "Uploaded_Resume.pdf",
+            metadata=metadata,
         )
         return result
     except GeminiKeyMissingError as e:
@@ -126,13 +138,19 @@ async def analyze_resume_text(
     x_gemini_api_key: Optional[str] = Header(None, description="Optional override API key"),
 ):
     selected_role = payload.role if payload.role in SUPPORTED_ROLES else "Other"
+    clean_jd = (payload.job_description or "").strip()
+    if len(clean_jd) < 20:
+        clean_jd = EXAMPLE_JOB_DESCRIPTIONS.get(
+            selected_role,
+            EXAMPLE_JOB_DESCRIPTIONS.get("Software Developer", "Professional software development role requiring strong technical skills.")
+        )
     analyzer = GeminiAnalyzer(api_key=x_gemini_api_key)
 
     try:
         result = analyzer.analyze_resume(
             resume_text=payload.resume_text,
             role=selected_role,
-            job_description=payload.job_description,
+            job_description=clean_jd,
             filename=payload.filename or "Pasted_Resume.txt",
         )
         return result
@@ -174,58 +192,27 @@ async def improve_resume_bullets(
 
     analyzer = GeminiAnalyzer(api_key=x_gemini_api_key)
     try:
-        # Mini analysis focused on bullets
-        client = analyzer._get_client()
-        bullets_text = "\n".join([f"- {b}" for b in payload.bullets])
-        prompt = f"""Role: {payload.role}
-Job Context: {payload.job_description or 'Standard industry benchmark'}
-Bullets to improve:
-{bullets_text}
-
-Transform each bullet into a high-impact, professional bullet.
-RULES:
-1. Do NOT invent numbers, percentages, or achievements.
-2. Insert clear placeholders like '[X%]' or '[Y requests/sec]' for missing metrics.
-3. Use powerful active verbs.
-Return JSON array of objects with keys: original, improved, explanation, action_verbs_used (array of strings), metrics_note."""
-
-        from google.genai import types
-        models_to_try = [
-            os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
-            "gemini-3.8-flash",
-            "gemini-2.5-flash",
-            "gemini-1.5-flash",
-        ]
-        response = None
-        for model_name in models_to_try:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.2,
-                    ),
-                )
-                if response and response.text:
-                    break
-            except Exception:
-                continue
-
-        if not response or not response.text:
-            raise HTTPException(status_code=500, detail="Gemini failed to generate improved bullets.")
-
-        import json
-
-        raw = response.text.strip()
-        data = json.loads(raw)
-        if isinstance(data, dict) and "bullets" in data:
-            data = data["bullets"]
-        return [BulletImprovement(**b) for b in data]
+        results = analyzer.improve_bullets(
+            bullets=payload.bullets,
+            role=payload.role,
+            job_description=payload.job_description or "",
+        )
+        return results
     except GeminiKeyMissingError as e:
-        raise HTTPException(status_code=503, detail={"code": "GEMINI_API_KEY_MISSING", "message": str(e)})
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "GEMINI_API_KEY_MISSING", "message": str(e)},
+        )
+    except GeminiAnalysisError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "GEMINI_ANALYSIS_FAILED", "message": str(e)},
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Bullet improvement failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Bullet improvement failed: {str(e)}",
+        )
 
 
 @router.post(

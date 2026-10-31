@@ -5,6 +5,7 @@ interface ScoreCircleProps {
   category: string;
   size?: number;
   strokeWidth?: number;
+  label?: string;
 }
 
 export const ScoreCircle: React.FC<ScoreCircleProps> = ({
@@ -12,6 +13,7 @@ export const ScoreCircle: React.FC<ScoreCircleProps> = ({
   category,
   size = 200,
   strokeWidth = 14,
+  label = 'Estimate',
 }) => {
   const [animatedScore, setAnimatedScore] = useState(0);
 
@@ -132,9 +134,9 @@ export const ScoreCircle: React.FC<ScoreCircleProps> = ({
         </svg>
 
         {/* Center Text */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
-          <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">
-            Estimate
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none px-2">
+          <span className="text-[10px] sm:text-xs uppercase tracking-wider font-bold text-slate-400 truncate max-w-[85%]">
+            {label}
           </span>
           <div className="flex items-baseline">
             <span className={`font-heading font-extrabold text-4xl sm:text-5xl tracking-tight ${scheme.textColor}`}>

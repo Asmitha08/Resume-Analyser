@@ -113,10 +113,54 @@ def extract_text_from_file(filename: str, content: bytes) -> str:
     """
     Dispatcher to extract text based on filename extension.
     """
+    text, _ = extract_text_and_metadata_from_file(filename, content)
+    return text
+
+
+def extract_text_and_metadata_from_file(filename: str, content: bytes) -> Tuple[str, Dict[str, Any]]:
+    """
+    Extracts text along with structural inspection metadata (tables, images, pages).
+    """
     lower = filename.lower()
+    metadata: Dict[str, Any] = {
+        "page_count": 1,
+        "images_count": 0,
+        "tables_count": 0,
+    }
+
     if lower.endswith(".pdf"):
-        return extract_text_from_pdf(content)
+        try:
+            doc = pymupdf.open(stream=content, filetype="pdf")
+            metadata["page_count"] = len(doc)
+            images_total = 0
+            tables_total = 0
+            for page in doc:
+                try:
+                    images_total += len(page.get_images())
+                except Exception:
+                    pass
+                try:
+                    tabs = page.find_tables()
+                    tables_total += len(tabs.tables) if hasattr(tabs, "tables") else 0
+                except Exception:
+                    pass
+            metadata["images_count"] = images_total
+            metadata["tables_count"] = tables_total
+        except Exception:
+            pass
+        text = extract_text_from_pdf(content)
+        return text, metadata
+
     elif lower.endswith(".docx"):
-        return extract_text_from_docx(content)
+        try:
+            doc_stream = io.BytesIO(content)
+            document = docx.Document(doc_stream)
+            metadata["tables_count"] = len(document.tables)
+            metadata["images_count"] = len(document.inline_shapes)
+        except Exception:
+            pass
+        text = extract_text_from_docx(content)
+        return text, metadata
+
     else:
         raise ValueError(f"Unsupported file format for '{filename}'. Only .pdf and .docx are supported.")

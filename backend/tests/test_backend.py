@@ -221,32 +221,145 @@ def test_api_analyze_missing_key_behavior():
     fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
     pdf_path = os.path.join(fixtures_dir, "sample_test_resume.pdf")
 
-    with open(pdf_path, "rb") as f:
-        res = client.post(
-            "/api/analyze",
-            files={"file": ("sample_test_resume.pdf", f, "application/pdf")},
-            data={
-                "role": "Software Developer",
-                "job_description": "We are seeking a Software Developer with experience in Python and SQL.",
-            },
-        )
-
-    # If GEMINI_API_KEY is not in env, should return 503
-    # If GEMINI_API_KEY is in env, will run real analysis
-    if not os.getenv("GEMINI_API_KEY"):
+    old_key = os.environ.get("GEMINI_API_KEY")
+    os.environ["GEMINI_API_KEY"] = ""
+    try:
+        with open(pdf_path, "rb") as f:
+            res = client.post(
+                "/api/analyze",
+                files={"file": ("sample_test_resume.pdf", f, "application/pdf")},
+                data={
+                    "role": "Software Developer",
+                    "job_description": "We are seeking a Software Developer with experience in Python and SQL.",
+                },
+            )
         assert res.status_code == 503
         data = res.json()
         assert "detail" in data
         assert data["detail"]["code"] == "GEMINI_API_KEY_MISSING"
+    finally:
+        if old_key is not None:
+            os.environ["GEMINI_API_KEY"] = old_key
+
+
+def test_ats_scanner():
+    from app.services.ats_scanner import evaluate_ats_compatibility
+
+    sample_text = """
+    Alex Morgan
+    Email: alex.morgan@example.com | Phone: (555) 234-5678 | San Francisco, CA | linkedin.com/in/alexmorgan
+    
+    Professional Summary
+    Dedicated Software Developer with 3+ years experience building scalable web applications.
+    
+    Work Experience
+    Software Engineer | Tech Corp (2022 - Present)
+    - Developed RESTful APIs in Python and FastAPI, handling 10,000 requests per minute.
+    - Optimized PostgreSQL database queries, reducing average latency by [insert actual metric].
+    
+    Education
+    B.S. in Computer Science | University of California (2018 - 2022)
+    
+    Skills
+    Python, FastAPI, SQL, PostgreSQL, Docker, Git, CI/CD, React
+    
+    Projects
+    Personal Task Manager: Built full-stack Kanban application using React and FastAPI.
+    """
+
+    ats_result = evaluate_ats_compatibility(
+        text=sample_text,
+        role="Software Developer",
+        job_description="Looking for a Software Developer with Python, FastAPI, Docker, and PostgreSQL experience.",
+        page_count=1,
+        images_count=0,
+        tables_count=1,
+    )
+
+    # Validate overall score and category
+    assert 0 <= ats_result["overall_score"] <= 100
+    assert ats_result["category"] in ["Exceptional Compatibility", "High Compatibility", "Moderate Compatibility", "Needs Improvement", "Low Compatibility"]
+
+    # Validate 5 weighted breakdown dimensions
+    bd = ats_result["breakdown"]
+    assert 0 <= bd["formatting_score"] <= 100
+    assert 0 <= bd["section_headings_score"] <= 100
+    assert 0 <= bd["contact_info_score"] <= 100
+    assert 0 <= bd["parsing_quality_score"] <= 100
+    assert 0 <= bd["keyword_alignment_score"] <= 100
+
+    # Validate section detection
+    detected = ats_result["detected_sections"]
+    assert "Experience" in detected
+    assert "Education" in detected
+    assert "Skills" in detected
+    assert "Projects" in detected
+
+    # Validate checks
+    checks = ats_result["checks"]
+    assert len(checks) >= 5
+    for c in checks:
+        assert "name" in c
+        assert c["status"] in ["pass", "warning", "fail"]
+        assert "detail" in c
+
+    # Validate keyword coverage
+    assert ats_result["keyword_coverage_percent"] > 0
+    assert ats_result["found_keywords_count"] > 0
+    assert ats_result["total_keywords_count"] > 0
+
+
+def test_ats_with_real_pdf_and_docx():
+    from app.services.extractor import extract_text_and_metadata_from_file
+    from app.services.ats_scanner import evaluate_ats_compatibility
+
+    fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
+    pdf_path = os.path.join(fixtures_dir, "sample_test_resume.pdf")
+    docx_path = os.path.join(fixtures_dir, "sample_test_resume.docx")
+
+    # Test real PDF
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+    pdf_text, pdf_meta = extract_text_and_metadata_from_file("sample_test_resume.pdf", pdf_bytes)
+    assert len(pdf_text) > 200
+    pdf_ats = evaluate_ats_compatibility(
+        text=pdf_text,
+        role="Software Developer",
+        job_description="Python, FastAPI, SQL, Git",
+        page_count=pdf_meta.get("page_count", 1),
+        images_count=pdf_meta.get("images_count", 0),
+        tables_count=pdf_meta.get("tables_count", 0),
+    )
+    assert pdf_ats["overall_score"] >= 60
+    assert len(pdf_ats["detected_sections"]) >= 3
+
+    # Test real DOCX
+    with open(docx_path, "rb") as f:
+        docx_bytes = f.read()
+    docx_text, docx_meta = extract_text_and_metadata_from_file("sample_test_resume.docx", docx_bytes)
+    assert len(docx_text) > 200
+    docx_ats = evaluate_ats_compatibility(
+        text=docx_text,
+        role="Software Developer",
+        job_description="Python, FastAPI, SQL, Git",
+        page_count=docx_meta.get("page_count", 1),
+        images_count=docx_meta.get("images_count", 0),
+        tables_count=docx_meta.get("tables_count", 0),
+    )
+    assert docx_ats["overall_score"] >= 60
+    assert len(docx_ats["detected_sections"]) >= 3
 
 
 if __name__ == "__main__":
     test_file_validation()
     test_pdf_and_docx_extraction()
     test_role_definitions()
+    test_ats_scanner()
+    test_ats_with_real_pdf_and_docx()
     test_reportlab_pdf_generation()
     test_api_health_endpoint()
     test_api_roles_endpoint()
     test_api_download_report_endpoint()
     test_api_analyze_missing_key_behavior()
-    print("ALL 8 BACKEND TESTS PASSED SUCCESSFULLY!")
+    print("ALL 10 BACKEND TESTS PASSED SUCCESSFULLY!")
+

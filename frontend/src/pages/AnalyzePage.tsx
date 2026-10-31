@@ -146,9 +146,14 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({ onOpenSettings }) => {
       setErrorMessage('Please paste at least 50 characters of resume content.');
       return;
     }
-    if (!jobDescription.trim() || jobDescription.trim().length < 20) {
-      setErrorMessage('Please supply the target job description (at least 20 characters).');
-      return;
+    let effectiveJd = jobDescription.trim();
+    if (!effectiveJd || effectiveJd.length < 20) {
+      if (rolesData?.example_job_descriptions[selectedRole]) {
+        effectiveJd = rolesData.example_job_descriptions[selectedRole];
+        setJobDescription(effectiveJd);
+      } else {
+        effectiveJd = `Standard industry qualifications, experience, and technical competencies for ${selectedRole}.`;
+      }
     }
 
     setIsAnalyzing(true);
@@ -162,9 +167,9 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({ onOpenSettings }) => {
     try {
       let result: ResumeAnalysisResponse;
       if (inputMode === 'upload' && file) {
-        result = await analyzeResumeFile(file, selectedRole, jobDescription);
+        result = await analyzeResumeFile(file, selectedRole, effectiveJd);
       } else {
-        result = await analyzeResumeText(resumeText, selectedRole, jobDescription);
+        result = await analyzeResumeText(resumeText, selectedRole, effectiveJd);
       }
 
       setAnalysisResult(result);

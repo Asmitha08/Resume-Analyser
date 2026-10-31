@@ -75,12 +75,43 @@ export interface SkillGapRoadmap {
   thirty_day_plan: WeeklyRoadmap[];
 }
 
+export interface ATSScoreBreakdown {
+  formatting_score: number;
+  section_headings_score: number;
+  contact_info_score: number;
+  parsing_quality_score: number;
+  keyword_alignment_score: number;
+}
+
+export interface ATSFormattingCheck {
+  name: string;
+  status: 'pass' | 'warning' | 'fail' | string;
+  detail: string;
+}
+
+export interface ATSCompatibilityScore {
+  overall_score: number;
+  category: string;
+  explanation: string;
+  breakdown: ATSScoreBreakdown;
+  formatting_warnings: string[];
+  missing_sections: string[];
+  detected_sections: string[];
+  checks: ATSFormattingCheck[];
+  keyword_coverage_percent: number;
+  found_keywords_count: number;
+  total_keywords_count: number;
+  recommendations: string[];
+  disclaimer: string;
+}
+
 export interface ResumeAnalysisResponse {
   candidate_name?: string;
   filename: string;
   selected_role: string;
   job_title: string;
   match_score: JobMatchScore;
+  ats_score: ATSCompatibilityScore;
   skills_analysis: SkillsAnalysis;
   keyword_analysis: KeywordAnalysis;
   strengths: ResumeStrengths;

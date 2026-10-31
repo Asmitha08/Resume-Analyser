@@ -39,14 +39,61 @@ export interface RolesResponse {
   example_job_descriptions: Record<string, string>;
 }
 
+const safeFetch = async (url: string, init?: RequestInit): Promise<Response> => {
+  try {
+    return await fetch(url, init);
+  } catch (err: any) {
+    if (err.name === 'TypeError' || err.message?.toLowerCase().includes('fetch')) {
+      throw new Error(
+        `Unable to reach backend service at ${BASE_URL}. Please ensure the FastAPI server is running.`
+      );
+    }
+    throw err;
+  }
+};
+
+const parseApiError = async (response: Response): Promise<Error> => {
+  let errorData: any = null;
+  try {
+    errorData = await response.json();
+  } catch {
+    errorData = null;
+  }
+
+  let errorMsg = `Server returned status ${response.status}`;
+  let errorCode: string | undefined;
+
+  if (errorData && errorData.detail) {
+    if (typeof errorData.detail === 'string') {
+      errorMsg = errorData.detail;
+    } else if (Array.isArray(errorData.detail)) {
+      // FastAPI 422 Unprocessable Entity array
+      errorMsg = errorData.detail
+        .map((e: any) => {
+          const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : '';
+          return field ? `${field}: ${e.msg || e.message}` : (e.msg || e.message || JSON.stringify(e));
+        })
+        .join('; ');
+    } else if (typeof errorData.detail === 'object') {
+      errorMsg = errorData.detail.message || errorData.detail.detail || JSON.stringify(errorData.detail);
+      errorCode = errorData.detail.code;
+    }
+  }
+
+  const err = new Error(errorMsg) as any;
+  err.status = response.status;
+  err.code = errorCode;
+  return err;
+};
+
 export const checkHealth = async (): Promise<HealthResponse> => {
   try {
-    const res = await fetch(`${BASE_URL}/api/health`, {
+    const res = await safeFetch(`${BASE_URL}/api/health`, {
       method: 'GET',
       headers: getHeaders(true),
     });
     if (!res.ok) {
-      throw new Error(`Health check returned status ${res.status}`);
+      throw await parseApiError(res);
     }
     return await res.json();
   } catch (err: any) {
@@ -56,12 +103,12 @@ export const checkHealth = async (): Promise<HealthResponse> => {
 
 export const getRoles = async (): Promise<RolesResponse> => {
   try {
-    const res = await fetch(`${BASE_URL}/api/roles`, {
+    const res = await safeFetch(`${BASE_URL}/api/roles`, {
       method: 'GET',
       headers: getHeaders(true),
     });
     if (!res.ok) {
-      throw new Error(`Roles fetch returned status ${res.status}`);
+      throw await parseApiError(res);
     }
     return await res.json();
   } catch (err: any) {
@@ -81,23 +128,14 @@ export const analyzeResumeFile = async (
 
   const headers = getHeaders(false); // Multipart/form-data sets its own boundary
 
-  const response = await fetch(`${BASE_URL}/api/analyze`, {
+  const response = await safeFetch(`${BASE_URL}/api/analyze`, {
     method: 'POST',
     headers,
     body: formData,
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error occurred.' }));
-    const errorMsg =
-      typeof errorData.detail === 'object'
-        ? errorData.detail.message || JSON.stringify(errorData.detail)
-        : errorData.detail || `Server returned ${response.status}`;
-    
-    const err = new Error(errorMsg) as any;
-    err.status = response.status;
-    err.code = typeof errorData.detail === 'object' ? errorData.detail.code : undefined;
-    throw err;
+    throw await parseApiError(response);
   }
 
   return await response.json();
@@ -108,7 +146,7 @@ export const analyzeResumeText = async (
   role: string,
   jobDescription: string
 ): Promise<ResumeAnalysisResponse> => {
-  const response = await fetch(`${BASE_URL}/api/analyze-text`, {
+  const response = await safeFetch(`${BASE_URL}/api/analyze-text`, {
     method: 'POST',
     headers: getHeaders(true),
     body: JSON.stringify({
@@ -120,16 +158,7 @@ export const analyzeResumeText = async (
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error occurred.' }));
-    const errorMsg =
-      typeof errorData.detail === 'object'
-        ? errorData.detail.message || JSON.stringify(errorData.detail)
-        : errorData.detail || `Server returned ${response.status}`;
-    
-    const err = new Error(errorMsg) as any;
-    err.status = response.status;
-    err.code = typeof errorData.detail === 'object' ? errorData.detail.code : undefined;
-    throw err;
+    throw await parseApiError(response);
   }
 
   return await response.json();
@@ -140,7 +169,7 @@ export const improveBullets = async (
   role: string,
   jobDescription: string = ''
 ): Promise<BulletImprovement[]> => {
-  const response = await fetch(`${BASE_URL}/api/improve-resume`, {
+  const response = await safeFetch(`${BASE_URL}/api/improve-resume`, {
     method: 'POST',
     headers: getHeaders(true),
     body: JSON.stringify({
@@ -151,24 +180,21 @@ export const improveBullets = async (
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Bullet enhancement failed.' }));
-    const errorMsg = typeof errorData.detail === 'string' ? errorData.detail : 'Bullet enhancement failed.';
-    throw new Error(errorMsg);
+    throw await parseApiError(response);
   }
 
   return await response.json();
 };
 
 export const downloadReportPdf = async (analysisData: ResumeAnalysisResponse): Promise<void> => {
-  const response = await fetch(`${BASE_URL}/api/download-report`, {
+  const response = await safeFetch(`${BASE_URL}/api/download-report`, {
     method: 'POST',
     headers: getHeaders(true),
     body: JSON.stringify(analysisData),
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Failed to generate PDF.' }));
-    throw new Error(errorData.detail || 'Could not download PDF report.');
+    throw await parseApiError(response);
   }
 
   const blob = await response.blob();

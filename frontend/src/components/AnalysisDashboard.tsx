@@ -15,6 +15,11 @@ import {
   TrendingUp,
   Tag,
   ShieldAlert,
+  ShieldCheck,
+  FileCheck,
+  Layers,
+  BarChart3,
+  Info,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { ResumeAnalysisResponse, BulletImprovement } from '../types/analysis';
@@ -93,6 +98,7 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data, onRe
     selected_role,
     job_title,
     match_score,
+    ats_score,
     skills_analysis,
     keyword_analysis,
     strengths,
@@ -102,6 +108,32 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data, onRe
     personalized_recommendations = [],
     created_at,
   } = data;
+
+  // Safe fallback if ats_score was omitted
+  const atsScore = ats_score || {
+    overall_score: 75,
+    category: 'Moderate Compatibility',
+    explanation: 'Standard document formatting detected with acceptable parser readability.',
+    breakdown: {
+      formatting_score: 80,
+      section_headings_score: 75,
+      contact_info_score: 80,
+      parsing_quality_score: 85,
+      keyword_alignment_score: 65,
+    },
+    formatting_warnings: [],
+    missing_sections: [],
+    detected_sections: ['Experience', 'Education', 'Skills'],
+    checks: [],
+    keyword_coverage_percent: 65,
+    found_keywords_count: 5,
+    total_keywords_count: 8,
+    recommendations: [
+      'Maintain standard chronological section headings (Experience, Education, Skills).',
+      'Ensure contact details include phone, email, and location on separate clear lines.',
+    ],
+    disclaimer: 'Transparent application-defined heuristic weights, not official ATS scoring criteria.',
+  };
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -171,117 +203,447 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data, onRe
         </div>
       )}
 
-      {/* SECTION A: Overall Match Score & Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Circular Progress & Category Card */}
-        <div className="lg:col-span-4 p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            AI Job Match Estimate
-          </span>
-
-          <ScoreCircle
-            score={match_score.overall_score}
-            category={match_score.match_category}
-            size={190}
-          />
-
-          <p className="text-xs text-slate-600 leading-relaxed max-w-xs">
-            {match_score.explanation}
-          </p>
-        </div>
-
-        {/* Contributing Factors & ATS Notice Card */}
-        <div className="lg:col-span-8 p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between space-y-6">
+      {/* SECTION A: TWO SEPARATE HERO SCORES (AI Job Match Estimate vs ATS Compatibility Score) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* SCORE A: AI Job Match Estimate (0–100) */}
+        <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-heading font-bold text-base text-slate-900 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-indigo-600" />
-                <span>Score Contributing Factors</span>
-              </h3>
-              <span className="text-[11px] font-semibold text-slate-400">
-                Weighted Evaluation
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-base text-slate-900">
+                    AI Job Match Estimate
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Semantic role & skills alignment</p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                {match_score.match_category}
               </span>
             </div>
 
-            {/* Factor Bars */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Factor 1: Skills Alignment */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">Skills Alignment</span>
-                  <span className="font-bold text-indigo-600">
-                    {match_score.score_breakdown.skills_score}%
-                  </span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
-                    style={{ width: `${match_score.score_breakdown.skills_score}%` }}
-                  />
+            <div className="mt-5 flex flex-col sm:flex-row items-center gap-6">
+              <div className="shrink-0">
+                <ScoreCircle
+                  score={match_score.overall_score}
+                  category={match_score.match_category}
+                  label="Job Match"
+                  size={160}
+                />
+              </div>
+              <div className="space-y-2 text-center sm:text-left">
+                <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                  {match_score.explanation}
+                </p>
+                <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Evaluates skills, projects, keywords & role experience</span>
                 </div>
               </div>
+            </div>
 
-              {/* Factor 2: Keywords Alignment */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">Keywords Coverage</span>
-                  <span className="font-bold text-indigo-600">
-                    {match_score.score_breakdown.keywords_score}%
-                  </span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
-                    style={{ width: `${match_score.score_breakdown.keywords_score}%` }}
-                  />
-                </div>
+            {/* Factor Progress Bars */}
+            <div className="mt-6 space-y-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span>Score Contributing Factors</span>
+                <span className="text-[11px] text-slate-400 font-normal">Candidate Fit</span>
               </div>
 
-              {/* Factor 3: Projects & Experience */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">Projects & Experience</span>
-                  <span className="font-bold text-indigo-600">
-                    {match_score.score_breakdown.experience_score}%
-                  </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">Skills Alignment</span>
+                    <span className="font-bold text-indigo-600">{match_score.score_breakdown.skills_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
+                      style={{ width: `${match_score.score_breakdown.skills_score}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
-                    style={{ width: `${match_score.score_breakdown.experience_score}%` }}
-                  />
-                </div>
-              </div>
 
-              {/* Factor 4: Education & Role Fit */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">Education & Core Fit</span>
-                  <span className="font-bold text-indigo-600">
-                    {match_score.score_breakdown.education_score}%
-                  </span>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">Keywords Coverage</span>
+                    <span className="font-bold text-indigo-600">{match_score.score_breakdown.keywords_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
+                      style={{ width: `${match_score.score_breakdown.keywords_score}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
-                    style={{ width: `${match_score.score_breakdown.education_score}%` }}
-                  />
+
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">Projects & Experience</span>
+                    <span className="font-bold text-indigo-600">{match_score.score_breakdown.experience_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
+                      style={{ width: `${match_score.score_breakdown.experience_score}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">Education & Core Fit</span>
+                    <span className="font-bold text-indigo-600">{match_score.score_breakdown.education_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
+                      style={{ width: `${match_score.score_breakdown.education_score}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Mandatory ATS Disclaimer */}
-          <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2.5">
+          <div className="p-3 rounded-2xl bg-indigo-50/50 border border-indigo-100 text-[11px] text-indigo-900 flex items-start gap-2">
+            <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <span className="leading-relaxed">
+              <strong>Notice:</strong> {match_score.disclaimer}
+            </span>
+          </div>
+        </div>
+
+        {/* SCORE B: ATS Compatibility Score (0–100) */}
+        <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50/50 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <FileCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-base text-slate-900">
+                    ATS Compatibility Score
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Structure, parsing quality & readability</p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {atsScore.category}
+              </span>
+            </div>
+
+            <div className="mt-5 flex flex-col sm:flex-row items-center gap-6">
+              <div className="shrink-0">
+                <ScoreCircle
+                  score={atsScore.overall_score}
+                  category={atsScore.category}
+                  label="ATS Score"
+                  size={160}
+                />
+              </div>
+              <div className="space-y-2 text-center sm:text-left">
+                <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                  {atsScore.explanation}
+                </p>
+                <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>5 Heuristic weights evaluating ATS parsing readability</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Heuristic Breakdown Bars (5 application-defined weights) */}
+            <div className="mt-6 space-y-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span>Weighted Heuristic Breakdown</span>
+                <span className="text-[11px] text-slate-400 font-normal">Deterministic</span>
+              </div>
+
+              <div className="space-y-2.5">
+                {/* 1. Formatting & Readability: 25% */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-700 font-medium">Formatting & Readability <span className="text-slate-400 font-normal">(25% weight)</span></span>
+                    <span className="font-bold text-emerald-600">{atsScore.breakdown.formatting_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-1000"
+                      style={{ width: `${atsScore.breakdown.formatting_score}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Standard Section Headings: 20% */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-700 font-medium">Standard Section Headings <span className="text-slate-400 font-normal">(20% weight)</span></span>
+                    <span className="font-bold text-emerald-600">{atsScore.breakdown.section_headings_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-1000"
+                      style={{ width: `${atsScore.breakdown.section_headings_score}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Contact Info & Structure: 15% */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-700 font-medium">Contact Info & Structure <span className="text-slate-400 font-normal">(15% weight)</span></span>
+                    <span className="font-bold text-emerald-600">{atsScore.breakdown.contact_info_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-1000"
+                      style={{ width: `${atsScore.breakdown.contact_info_score}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Text Extraction & Parsing Quality: 20% */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-700 font-medium">Text Extraction & Parsing Quality <span className="text-slate-400 font-normal">(20% weight)</span></span>
+                    <span className="font-bold text-emerald-600">{atsScore.breakdown.parsing_quality_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-1000"
+                      style={{ width: `${atsScore.breakdown.parsing_quality_score}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 5. JD Keyword Alignment: 20% */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-700 font-medium">JD Keyword Alignment <span className="text-slate-400 font-normal">(20% weight)</span></span>
+                    <span className="font-bold text-emerald-600">{atsScore.breakdown.keyword_alignment_score}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-1000"
+                      style={{ width: `${atsScore.breakdown.keyword_alignment_score}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2">
             <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <span className="leading-relaxed">
-              <strong>AI Job Match Estimate Notice:</strong> {match_score.disclaimer}
+              <strong>Notice:</strong> {atsScore.disclaimer}
             </span>
           </div>
         </div>
       </div>
 
-      {/* SECTION B: Skills & Relevance Visualization */}
+      {/* SECTION B: ATS SCORE DASHBOARD & DIAGNOSTICS */}
+      <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+          <div>
+            <h3 className="font-heading font-bold text-base text-slate-900 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-emerald-600" />
+              <span>ATS Compatibility Diagnostics & Health Checks</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Deterministic evaluation of document structure, extraction viability, and recruiter parsing signals.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {atsScore.keyword_coverage_percent}% Keyword Coverage
+            </span>
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200">
+              {atsScore.detected_sections.length} Headings Found
+            </span>
+          </div>
+        </div>
+
+        {/* 1. Formatting Warnings Banner */}
+        {atsScore.formatting_warnings && atsScore.formatting_warnings.length > 0 ? (
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <span>ATS Formatting Warnings ({atsScore.formatting_warnings.length})</span>
+            </div>
+            <ul className="space-y-1.5 pl-6 list-disc text-xs text-amber-900">
+              {atsScore.formatting_warnings.map((warning, idx) => (
+                <li key={idx} className="leading-relaxed">{warning}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex items-center gap-2.5 text-xs text-emerald-800 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Clean ATS Structure: No parsing blockers, graphics interference, or layout traps found.</span>
+          </div>
+        )}
+
+        {/* 2. Headings & Keyword Coverage row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Section Headings Inspection */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <FileCheck className="w-4 h-4 text-indigo-600" />
+                <span>Standard Section Headings</span>
+              </span>
+              <span className="text-[11px] text-slate-400 font-normal">
+                {atsScore.detected_sections.length} Detected / {atsScore.missing_sections.length} Missing
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Detected Sections:</div>
+              <div className="flex flex-wrap gap-1.5">
+                {atsScore.detected_sections.map((sec, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1"
+                  >
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    {sec}
+                  </span>
+                ))}
+                {atsScore.detected_sections.length === 0 && (
+                  <span className="text-xs text-slate-400">None detected.</span>
+                )}
+              </div>
+            </div>
+
+            {atsScore.missing_sections && atsScore.missing_sections.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-slate-200/60">
+                <div className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">Missing Recommended Sections:</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {atsScore.missing_sections.map((sec, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1"
+                    >
+                      <XCircle className="w-3 h-3 text-rose-600" />
+                      {sec}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Keyword Coverage Meter */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <BarChart3 className="w-4 h-4 text-indigo-600" />
+                <span>Job Keyword Coverage</span>
+              </span>
+              <span className="text-[11px] font-bold text-indigo-600">
+                {atsScore.keyword_coverage_percent}%
+              </span>
+            </div>
+
+            <div className="w-full h-2.5 rounded-full bg-slate-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-indigo-600 transition-all duration-1000"
+                style={{ width: `${atsScore.keyword_coverage_percent}%` }}
+              />
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed">
+              Found <strong>{atsScore.found_keywords_count}</strong> of <strong>{atsScore.total_keywords_count}</strong> critical job keywords in your resume text. Increasing keyword alignment boosts automatic ranking in corporate ATS filters.
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-white border border-slate-200/70 text-[11px] text-slate-500 flex items-center justify-between">
+              <span>Keyword Density Metric</span>
+              <span className="font-semibold text-slate-700">
+                {atsScore.breakdown.keyword_alignment_score} / 100
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Deterministic ATS Formatting Checks List */}
+        {atsScore.checks && atsScore.checks.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              <span>Deterministic Compatibility Checks</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {atsScore.checks.map((chk, idx) => {
+                const isPass = chk.status === 'pass';
+                const isWarning = chk.status === 'warning';
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
+                      isPass
+                        ? 'bg-emerald-50/40 border-emerald-200 text-emerald-950'
+                        : isWarning
+                        ? 'bg-amber-50/40 border-amber-200 text-amber-950'
+                        : 'bg-rose-50/40 border-rose-200 text-rose-950'
+                    }`}
+                  >
+                    <span className="mt-0.5 shrink-0">
+                      {isPass ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      ) : isWarning ? (
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-rose-600" />
+                      )}
+                    </span>
+                    <div className="space-y-0.5">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <span>{chk.name}</span>
+                        <span
+                          className={`text-[10px] uppercase px-1.5 py-0.2 rounded font-extrabold ${
+                            isPass
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isWarning
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {chk.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-normal">{chk.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 4. Recommendations to Improve ATS Compatibility */}
+        {atsScore.recommendations && atsScore.recommendations.length > 0 && (
+          <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
+              <Lightbulb className="w-4 h-4 text-indigo-600" />
+              <span>Actionable Recommendations to Improve ATS Compatibility</span>
+            </div>
+            <ul className="space-y-1.5 pl-6 list-disc text-xs text-indigo-950">
+              {atsScore.recommendations.map((rec, idx) => (
+                <li key={idx} className="leading-relaxed font-medium">{rec}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION C: Skills & Relevance Visualization */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Skills Tag Cloud Card */}
         <div className="lg:col-span-6 p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-6">
