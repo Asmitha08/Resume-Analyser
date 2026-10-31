@@ -17,9 +17,9 @@
 
 | Service | URL |
 |---|---|
-| **Frontend App** | *Coming soon — Vercel* |
-| **Backend API** | *Coming soon — Render* |
-| **API Docs (Swagger)** | *Coming soon — Render `/docs`* |
+| **Frontend App** | * Vercel* |
+| **Backend API** | *Render* |
+| **API Docs (Swagger)** | * Render `/docs`* |
 | **GitHub Repository** | [github.com/Asmitha08/Resume-Analyser](https://github.com/Asmitha08/Resume-Analyser) |
 
 ---
