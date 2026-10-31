@@ -190,15 +190,33 @@ RULES:
 Return JSON array of objects with keys: original, improved, explanation, action_verbs_used (array of strings), metrics_note."""
 
         from google.genai import types
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2,
-            ),
-        )
+        models_to_try = [
+            os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+            "gemini-3.8-flash",
+            "gemini-2.5-flash",
+            "gemini-1.5-flash",
+        ]
+        response = None
+        for model_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2,
+                    ),
+                )
+                if response and response.text:
+                    break
+            except Exception:
+                continue
+
+        if not response or not response.text:
+            raise HTTPException(status_code=500, detail="Gemini failed to generate improved bullets.")
+
         import json
+
         raw = response.text.strip()
         data = json.loads(raw)
         if isinstance(data, dict) and "bullets" in data:

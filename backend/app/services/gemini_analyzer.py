@@ -41,9 +41,20 @@ class GeminiAnalysisError(Exception):
     pass
 
 
+from pathlib import Path
+from dotenv import load_dotenv
+
 class GeminiAnalyzer:
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY", "").strip()
+        key = (api_key or os.getenv("GEMINI_API_KEY", "")).strip()
+        if not key:
+            # Re-read backend/.env dynamically in case user just created it
+            env_file = Path(__file__).resolve().parent.parent.parent / ".env"
+            if env_file.exists():
+                load_dotenv(dotenv_path=env_file, override=True)
+                key = os.getenv("GEMINI_API_KEY", "").strip()
+        self.api_key = key
+
 
     def is_configured(self) -> bool:
         return bool(self.api_key and len(self.api_key) > 5)
@@ -221,24 +232,49 @@ Analyze the resume and produce a structured JSON object matching this exact stru
   ]
 }}"""
 
-        try:
-            # We use gemini-2.5-flash with JSON mode
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    response_mime_type="application/json",
-                    temperature=0.2,
-                ),
-            )
-        except APIError as e:
-            raise GeminiAnalysisError(f"Gemini API error ({e.code}): {e.message}")
-        except Exception as e:
-            raise GeminiAnalysisError(f"Failed to communicate with Gemini API: {str(e)}")
+        models_to_try = [
+            os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+            "gemini-3.8-flash",
+            "gemini-2.5-flash",
+            "gemini-1.5-flash",
+        ]
+        unique_models = []
+        for m in models_to_try:
+            if m and m not in unique_models:
+                unique_models.append(m)
 
-        if not response.text:
+        response = None
+        last_error = None
+        for model_name in unique_models:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        response_mime_type="application/json",
+                        temperature=0.2,
+                    ),
+                )
+                if response and response.text:
+                    break
+            except APIError as e:
+                last_error = e
+                # If model is unavailable / 404, try next candidate model
+                if e.code == 404 or "not available" in str(e).lower() or "not found" in str(e).lower():
+                    continue
+                raise GeminiAnalysisError(f"Gemini API error ({e.code}): {e.message}")
+            except Exception as e:
+                last_error = e
+                continue
+
+        if not response or not response.text:
+            if last_error:
+                if isinstance(last_error, APIError):
+                    raise GeminiAnalysisError(f"Gemini API error ({last_error.code}): {last_error.message}")
+                raise GeminiAnalysisError(f"Failed to communicate with Gemini API: {str(last_error)}")
             raise GeminiAnalysisError("Gemini returned an empty response.")
+
 
         raw_json = response.text.strip()
         # Clean any markdown codefence if present
