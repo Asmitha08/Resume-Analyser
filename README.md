@@ -18,8 +18,8 @@
 | Service | URL |
 |---|---|
 | **Frontend App** | *Vercel* |
-| **Backend API** | *Render* |
-| **API Docs (Swagger)** | *Render `/docs`* |
+| **Backend API** | [resume-analyser-4r4m.onrender.com](https://resume-analyser-4r4m.onrender.com) |
+| **API Docs (Swagger)** | [resume-analyser-4r4m.onrender.com/docs](https://resume-analyser-4r4m.onrender.com/docs) |
 | **GitHub Repository** | [github.com/Asmitha08/Resume-Analyser](https://github.com/Asmitha08/Resume-Analyser) |
 
 ---
